@@ -1,6 +1,6 @@
-public class WarehouseContext {
-    private static WarehouseContext instance;
+import javax.swing.*;
 
+public class WarehouseContext {
     public static final int LOGIN_STATE = 0;
     public static final int CLIENT_STATE = 1;
     public static final int CLERK_STATE = 2;
@@ -18,7 +18,10 @@ public class WarehouseContext {
     private static final int LOGOUT_TO_CLERK = 6;
     private static final int LOGOUT_TO_MANAGER = 7;
 
+    private static WarehouseContext context;
+
     private final Warehouse warehouse;
+    private final JFrame frame;
     private WarehouseState[] states;
 
     private int currentState = LOGIN_STATE;
@@ -26,41 +29,62 @@ public class WarehouseContext {
     private String activeClientID;
     private boolean running = true;
 
-    // Rows: events. Columns: Login, Client, Clerk, Manager.
+    // Rows are events. Columns are Login, Client, Clerk, and Manager.
     private final int[][] transitionMatrix = {
-        {CLIENT_STATE, -1, -1, -1},
-        {CLERK_STATE, -1, -1, -1},
-        {MANAGER_STATE, -1, -1, -1},
-        {-1, -1, CLIENT_STATE, -1},
-        {-1, -1, -1, CLERK_STATE},
-        {-1, LOGIN_STATE, LOGIN_STATE, LOGIN_STATE},
-        {-1, CLERK_STATE, -1, -1},
-        {-1, -1, MANAGER_STATE, -1}
+            {CLIENT_STATE, INVALID_TRANSITION,
+                    INVALID_TRANSITION, INVALID_TRANSITION},
+            {CLERK_STATE, INVALID_TRANSITION,
+                    INVALID_TRANSITION, INVALID_TRANSITION},
+            {MANAGER_STATE, INVALID_TRANSITION,
+                    INVALID_TRANSITION, INVALID_TRANSITION},
+            {INVALID_TRANSITION, INVALID_TRANSITION,
+                    CLIENT_STATE, INVALID_TRANSITION},
+            {INVALID_TRANSITION, INVALID_TRANSITION,
+                    INVALID_TRANSITION, CLERK_STATE},
+            {INVALID_TRANSITION, LOGIN_STATE,
+                    LOGIN_STATE, LOGIN_STATE},
+            {INVALID_TRANSITION, CLERK_STATE,
+                    INVALID_TRANSITION, INVALID_TRANSITION},
+            {INVALID_TRANSITION, INVALID_TRANSITION,
+                    MANAGER_STATE, INVALID_TRANSITION}
     };
 
     private WarehouseContext() {
         warehouse = Warehouse.instance();
+
+        frame = new JFrame("Warehouse FSM GUI");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(650, 450);
+        frame.setLocationRelativeTo(null);
     }
 
     public static WarehouseContext instance() {
-        if (instance == null) {
-            instance = new WarehouseContext();
+        if (context == null) {
+            context = new WarehouseContext();
         }
-        return instance;
+        return context;
+    }
+
+    private void initializeStates() {
+        if (states != null) {
+            return;
+        }
+
+        states = new WarehouseState[] {
+                LoginState.instance(),
+                ClientMenuState.instance(),
+                ClerkMenuState.instance(),
+                ManagerMenuState.instance()
+        };
     }
 
     public void process() {
-        // Initialize states after the Context singleton exists.
-        states = new WarehouseState[] {
-            LoginState.instance(),
-            ClientMenuState.instance(),
-            ClerkMenuState.instance(),
-            ManagerMenuState.instance()
-        };
+        initializeStates();
+        states[currentState].run();
+    }
 
-        while (running) {
-            states[currentState].run();
-        }
+    public JFrame getFrame() {
+        return frame;
     }
 
     public boolean login(int role, String clientID) {
@@ -69,53 +93,38 @@ public class WarehouseContext {
         }
 
         int event;
-        String verifiedClientID = null;
 
-        switch (role) {
-            case CLIENT_STATE:
-                if (clientID == null) {
-                    return false;
-                }
-
-                verifiedClientID = clientID.trim();
-
-                if (warehouse.getClient(verifiedClientID) == null) {
-                    return false;
-                }
-
-                event = LOGIN_CLIENT;
-                break;
-
-            case CLERK_STATE:
-                event = LOGIN_CLERK;
-                break;
-
-            case MANAGER_STATE:
-                event = LOGIN_MANAGER;
-                break;
-
-            default:
+        if (role == CLIENT_STATE) {
+            if (clientID == null
+                    || warehouse.getClient(clientID.trim()) == null) {
                 return false;
+            }
+
+            activeClientID = clientID.trim();
+            event = LOGIN_CLIENT;
+        } else if (role == CLERK_STATE) {
+            activeClientID = null;
+            event = LOGIN_CLERK;
+        } else if (role == MANAGER_STATE) {
+            activeClientID = null;
+            event = LOGIN_MANAGER;
+        } else {
+            return false;
         }
 
         originalLoginRole = role;
-        activeClientID = verifiedClientID;
         changeState(event);
         return true;
     }
 
     public boolean becomeClient(String clientID) {
-        if (currentState != CLERK_STATE || clientID == null) {
+        if (currentState != CLERK_STATE
+                || clientID == null
+                || warehouse.getClient(clientID.trim()) == null) {
             return false;
         }
 
-        String verifiedClientID = clientID.trim();
-
-        if (warehouse.getClient(verifiedClientID) == null) {
-            return false;
-        }
-
-        activeClientID = verifiedClientID;
+        activeClientID = clientID.trim();
         changeState(BECOME_CLIENT);
         return true;
     }
@@ -130,32 +139,29 @@ public class WarehouseContext {
     }
 
     public void logout() {
-        switch (currentState) {
-            case CLIENT_STATE:
-                activeClientID = null;
+        int event;
 
-                if (originalLoginRole == CLIENT_STATE) {
-                    changeState(LOGOUT_TO_LOGIN);
-                } else {
-                    changeState(LOGOUT_TO_CLERK);
-                }
-                break;
+        if (currentState == CLIENT_STATE) {
+            activeClientID = null;
 
-            case CLERK_STATE:
-                if (originalLoginRole == MANAGER_STATE) {
-                    changeState(LOGOUT_TO_MANAGER);
-                } else {
-                    changeState(LOGOUT_TO_LOGIN);
-                }
-                break;
-
-            case MANAGER_STATE:
-                changeState(LOGOUT_TO_LOGIN);
-                break;
-
-            default:
-                return;
+            if (originalLoginRole == CLIENT_STATE) {
+                event = LOGOUT_TO_LOGIN;
+            } else {
+                event = LOGOUT_TO_CLERK;
+            }
+        } else if (currentState == CLERK_STATE) {
+            if (originalLoginRole == MANAGER_STATE) {
+                event = LOGOUT_TO_MANAGER;
+            } else {
+                event = LOGOUT_TO_LOGIN;
+            }
+        } else if (currentState == MANAGER_STATE) {
+            event = LOGOUT_TO_LOGIN;
+        } else {
+            return;
         }
+
+        changeState(event);
 
         if (currentState == LOGIN_STATE) {
             clearSession();
@@ -176,7 +182,8 @@ public class WarehouseContext {
 
     private void changeState(int event) {
         if (event < 0 || event >= transitionMatrix.length) {
-            throw new IllegalArgumentException("Unknown transition event.");
+            throw new IllegalArgumentException(
+                    "Invalid transition event.");
         }
 
         int nextState = transitionMatrix[event][currentState];
@@ -187,6 +194,7 @@ public class WarehouseContext {
         }
 
         currentState = nextState;
+        states[currentState].run();
     }
 
     private void clearSession() {
@@ -198,9 +206,15 @@ public class WarehouseContext {
         running = false;
         clearSession();
         currentState = LOGIN_STATE;
+        frame.dispose();
+    }
+
+    public boolean isRunning() {
+        return running;
     }
 
     public static void main(String[] args) {
-        WarehouseContext.instance().process();
+        SwingUtilities.invokeLater(
+                () -> WarehouseContext.instance().process());
     }
 }

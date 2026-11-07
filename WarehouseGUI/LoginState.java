@@ -1,11 +1,10 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+
 public class LoginState extends WarehouseState {
     private static LoginState instance;
-
-    private static final int EXIT = 0;
-    private static final int CLIENT = 1;
-    private static final int CLERK = 2;
-    private static final int MANAGER = 3;
-    private static final int HELP = 4;
+    private JFrame frame;
 
     private LoginState() {
         super();
@@ -18,85 +17,108 @@ public class LoginState extends WarehouseState {
         return instance;
     }
 
-    public void help() {
-        System.out.println("\n---- Warehouse Login ----");
-        System.out.println("0 to exit");
-        System.out.println("1 to login as a client");
-        System.out.println("2 to login as a clerk");
-        System.out.println("3 to login as a manager");
-        System.out.println("4 for help");
-    }
+    private void loginClient() {
+        String clientID = JOptionPane.showInputDialog(
+                frame,
+                "Enter client ID:",
+                "Client Login",
+                JOptionPane.QUESTION_MESSAGE);
 
-    public int getCommand() {
-        while (true) {
-            int command = WarehouseInput.getNumber("Enter command");
-
-            if (command >= EXIT && command <= HELP) {
-                return command;
-            }
-
-            System.out.println("Enter a number between 0 and 4.");
+        if (clientID == null) {
+            return;
         }
-    }
 
-    public void loginClient() {
-        String clientID = WarehouseInput.getToken(
-                "Enter client ID (e.g. C1)");
-
-        boolean success = WarehouseContext.instance().login(
-                WarehouseContext.CLIENT_STATE, clientID);
-
-        if (!success) {
-            System.out.println("Client ID not found.");
-        }
-    }
-
-    public void loginClerk() {
         if (!WarehouseContext.instance().login(
-                WarehouseContext.CLERK_STATE, null)) {
-            System.out.println("Could not login as clerk.");
+                WarehouseContext.CLIENT_STATE, clientID.trim())) {
+            JOptionPane.showMessageDialog(
+                    frame,
+                    "Invalid client ID.",
+                    "Login Error",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 
-    public void loginManager() {
-        if (!WarehouseContext.instance().login(
-                WarehouseContext.MANAGER_STATE, null)) {
-            System.out.println("Could not login as manager.");
+    private void loginClerk() {
+        WarehouseContext.instance().login(
+                WarehouseContext.CLERK_STATE, null);
+    }
+
+    private void loginManager() {
+        WarehouseContext.instance().login(
+                WarehouseContext.MANAGER_STATE, null);
+    }
+
+    private void exitProgram() {
+        int choice = JOptionPane.showConfirmDialog(
+                frame,
+                "Are you sure you want to exit?",
+                "Exit Warehouse",
+                JOptionPane.YES_NO_OPTION);
+
+        if (choice == JOptionPane.YES_OPTION) {
+            WarehouseContext.instance().stop();
         }
     }
 
     @Override
     public void run() {
-        WarehouseContext context = WarehouseContext.instance();
-        help();
+        frame = WarehouseContext.instance().getFrame();
 
-        while (context.getCurrentState()
-                == WarehouseContext.LOGIN_STATE) {
-            switch (getCommand()) {
-                case EXIT:
-                    context.stop();
-                    System.out.println("Goodbye.");
-                    return;
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 20));
+        mainPanel.setBorder(
+                BorderFactory.createEmptyBorder(30, 40, 30, 40));
 
-                case CLIENT:
-                    loginClient();
-                    break;
+        JLabel title = new JLabel(
+                "Warehouse Login",
+                SwingConstants.CENTER);
+        title.setFont(new Font("SansSerif", Font.BOLD, 24));
 
-                case CLERK:
-                    loginClerk();
-                    break;
+        JPanel buttonPanel = new JPanel(new GridLayout(4, 1, 10, 10));
 
-                case MANAGER:
-                    loginManager();
-                    break;
+        JButton clientButton = new JButton(
+                new AbstractAction("Login as Client") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        loginClient();
+                    }
+                });
 
-                case HELP:
-                    help();
-                    break;
+        JButton clerkButton = new JButton(
+                new AbstractAction("Login as Clerk") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        loginClerk();
+                    }
+                });
 
-                default:
-                    break;
-            }
-        }
+        JButton managerButton = new JButton(
+                new AbstractAction("Login as Manager") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        loginManager();
+                    }
+                });
+
+        JButton exitButton = new JButton(
+                new AbstractAction("Exit") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        exitProgram();
+                    }
+                });
+
+        buttonPanel.add(clientButton);
+        buttonPanel.add(clerkButton);
+        buttonPanel.add(managerButton);
+        buttonPanel.add(exitButton);
+
+        mainPanel.add(title, BorderLayout.NORTH);
+        mainPanel.add(buttonPanel, BorderLayout.CENTER);
+
+        frame.setContentPane(mainPanel);
+        frame.revalidate();
+        frame.repaint();
+        frame.setVisible(true);
+        frame.toFront();
     }
 }
