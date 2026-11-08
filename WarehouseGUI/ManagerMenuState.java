@@ -1,19 +1,18 @@
 
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.util.Iterator;
 
 public class ManagerMenuState extends WarehouseState {
 
     private static ManagerMenuState instance;
-    private final Warehouse warehouse;
-
-    private static final int LOGOUT = 0;
-    private static final int ADD_PRODUCT = 1;
-    private static final int SHOW_WAITLIST = 2;
-    private static final int RECEIVE_SHIPMENT = 3;
-    private static final int BECOME_CLERK = 4;
-    private static final int HELP = 5;
+    private Warehouse warehouse;
+    private JFrame frame;
 
     private ManagerMenuState() {
+        super();
         warehouse = Warehouse.instance();
     }
 
@@ -24,150 +23,218 @@ public class ManagerMenuState extends WarehouseState {
         return instance;
     }
 
-    public void run() {
-        process();
-    }
+    private void addProduct() {
+        String name = JOptionPane.showInputDialog(
+                frame, "Enter product name:");
 
-    public void help() {
-        System.out.println("\n--- Manager Menu ---");
-        System.out.println(LOGOUT + " to log out");
-        System.out.println(ADD_PRODUCT + " to add a product");
-        System.out.println(SHOW_WAITLIST + " to show a product waitlist");
-        System.out.println(RECEIVE_SHIPMENT + " to receive a shipment");
-        System.out.println(BECOME_CLERK + " to switch to Clerk Menu");
-        System.out.println(HELP + " for help");
-    }
-
-    public int getCommand() {
-        while (true) {
-            int command = WarehouseInput.getNumber("Enter command:");
-
-            if (command >= LOGOUT && command <= HELP) {
-                return command;
-            }
-
-            System.out.println("Please enter a number between 0 and 5.");
+        if (name == null || name.trim().isEmpty()) {
+            return;
         }
-    }
 
-    public void addProduct() {
-        String name = WarehouseInput.getToken("Enter product name");
-        int quantity = WarehouseInput.getNumber("Enter quantity");
-        double price = WarehouseInput.getAmount("Enter unit price");
+        String quantityInput = JOptionPane.showInputDialog(
+                frame, "Enter quantity:");
 
-        if (quantity < 0 || price < 0) {
-            System.out.println("Quantity and price cannot be negative.");
+        if (quantityInput == null) {
+            return;
+        }
+
+        String priceInput = JOptionPane.showInputDialog(
+                frame, "Enter unit price:");
+
+        if (priceInput == null) {
             return;
         }
 
         try {
-            Product result = warehouse.addProduct(name, quantity, price);
+            int quantity = Integer.parseInt(quantityInput);
+            double price = Double.parseDouble(priceInput);
+
+            if (quantity < 0 || price < 0) {
+                JOptionPane.showMessageDialog(
+                        frame, "Quantity and price cannot be negative.");
+                return;
+            }
+
+            Product result = warehouse.addProduct(
+                    name.trim(), quantity, price);
 
             if (result != null) {
-                System.out.println("Product added: " + result);
+                JOptionPane.showMessageDialog(
+                        frame, "Product added: " + result);
             } else {
-                System.out.println("Product could not be added.");
+                JOptionPane.showMessageDialog(
+                        frame, "Product could not be added.");
             }
+
+        } catch (NumberFormatException exception) {
+            JOptionPane.showMessageDialog(
+                    frame, "Please enter valid numbers.");
         } catch (IllegalArgumentException exception) {
-            System.out.println(exception.getMessage());
+            JOptionPane.showMessageDialog(
+                    frame, exception.getMessage());
         }
     }
 
-    public void showWaitlist() {
-        String productID = WarehouseInput.getToken("Enter product ID");
+    private void showWaitlist() {
+        String productID = JOptionPane.showInputDialog(
+                frame, "Enter product ID:");
+
+        if (productID == null || productID.trim().isEmpty()) {
+            return;
+        }
 
         Iterator<WaitlistItem> items =
-                warehouse.getProductWaitlist(productID);
+                warehouse.getProductWaitlist(productID.trim());
 
         if (items == null) {
-            System.out.println("Product not found.");
+            JOptionPane.showMessageDialog(
+                    frame, "Product not found.");
             return;
         }
 
-        System.out.println("--- Product Waitlist ---");
-
-        if (!items.hasNext()) {
-            System.out.println("No clients are waiting for this product.");
-            return;
-        }
+        StringBuilder result = new StringBuilder();
 
         while (items.hasNext()) {
-            System.out.println(items.next());
+            result.append(items.next()).append("\n");
         }
+
+        if (result.length() == 0) {
+            result.append("No clients are waiting for this product.");
+        }
+
+        JOptionPane.showMessageDialog(
+                frame, result.toString(),
+                "Product Waitlist", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    public void receiveShipment() {
-        String productID = WarehouseInput.getToken("Enter product ID");
-        int quantity = WarehouseInput.getNumber("Enter received quantity");
+    private void receiveShipment() {
+        String productID = JOptionPane.showInputDialog(
+                frame, "Enter product ID:");
 
-        if (quantity <= 0) {
-            System.out.println("Quantity must be greater than zero.");
+        if (productID == null || productID.trim().isEmpty()) {
             return;
         }
 
-        Iterator<Invoice> invoices =
-                warehouse.receiveShipment(productID, quantity);
+        String quantityInput = JOptionPane.showInputDialog(
+                frame, "Enter received quantity:");
 
-        if (invoices == null) {
-            System.out.println("Shipment could not be processed. Check the product ID.");
+        if (quantityInput == null) {
             return;
         }
 
-        System.out.println("--- Shipment Results ---");
+        try {
+            int quantity = Integer.parseInt(quantityInput);
 
-        if (!invoices.hasNext()) {
-            System.out.println("No waitlist orders were filled. Remaining stock was added.");
-            return;
-        }
+            if (quantity <= 0) {
+                JOptionPane.showMessageDialog(
+                        frame, "Quantity must be greater than zero.");
+                return;
+            }
 
-        while (invoices.hasNext()) {
-            System.out.println(invoices.next());
+            Iterator<Invoice> invoices =
+                    warehouse.receiveShipment(productID.trim(), quantity);
+
+            if (invoices == null) {
+                JOptionPane.showMessageDialog(
+                        frame, "Shipment could not be processed. Check the product ID.");
+                return;
+            }
+
+            StringBuilder result = new StringBuilder();
+
+            while (invoices.hasNext()) {
+                result.append(invoices.next()).append("\n");
+            }
+
+            if (result.length() == 0) {
+                result.append("No waitlist orders were filled. Remaining stock was added.");
+            }
+
+            JOptionPane.showMessageDialog(
+                    frame, result.toString(),
+                    "Shipment Results", JOptionPane.INFORMATION_MESSAGE);
+
+        } catch (NumberFormatException exception) {
+            JOptionPane.showMessageDialog(
+                    frame, "Please enter a valid quantity.");
         }
     }
 
-    public void becomeClerk() {
-        if (WarehouseContext.instance().becomeClerk()) {
-            System.out.println("Switching to Clerk Menu.");
-        } else {
-            System.out.println("Could not switch to Clerk Menu.");
-        }
+    private void becomeClerk() {
+        WarehouseContext.instance().becomeClerk();
     }
 
-    public void logout() {
+    private void logout() {
         WarehouseContext.instance().logout();
     }
 
-    public void process() {
-        help();
+    @Override
+    public void run() {
+        frame = WarehouseContext.instance().getFrame();
 
-        while (true) {
-            int command = getCommand();
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 20));
+        mainPanel.setBorder(
+                BorderFactory.createEmptyBorder(30, 40, 30, 40));
 
-            switch (command) {
-                case ADD_PRODUCT:
-                    addProduct();
-                    break;
+        JLabel title = new JLabel(
+                "Manager Menu", SwingConstants.CENTER);
+        title.setFont(new Font("SansSerif", Font.BOLD, 24));
 
-                case SHOW_WAITLIST:
-                    showWaitlist();
-                    break;
+        JPanel buttonPanel = new JPanel(new GridLayout(5, 1, 10, 10));
 
-                case RECEIVE_SHIPMENT:
-                    receiveShipment();
-                    break;
+        JButton addProductButton = new JButton(
+                new AbstractAction("Add Product") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        addProduct();
+                    }
+                });
 
-                case BECOME_CLERK:
-                    becomeClerk();
-                    return;
+        JButton waitlistButton = new JButton(
+                new AbstractAction("Show Waitlist") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        showWaitlist();
+                    }
+                });
 
-                case LOGOUT:
-                    logout();
-                    return;
+        JButton shipmentButton = new JButton(
+                new AbstractAction("Receive Shipment") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        receiveShipment();
+                    }
+                });
 
-                case HELP:
-                    help();
-                    break;
-            }
-        }
+        JButton clerkButton = new JButton(
+                new AbstractAction("Become Clerk") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        becomeClerk();
+                    }
+                });
+
+        JButton logoutButton = new JButton(
+                new AbstractAction("Logout") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        logout();
+                    }
+                });
+
+        buttonPanel.add(addProductButton);
+        buttonPanel.add(waitlistButton);
+        buttonPanel.add(shipmentButton);
+        buttonPanel.add(clerkButton);
+        buttonPanel.add(logoutButton);
+
+        mainPanel.add(title, BorderLayout.NORTH);
+        mainPanel.add(buttonPanel, BorderLayout.CENTER);
+
+        frame.setContentPane(mainPanel);
+        frame.revalidate();
+        frame.repaint();
+        frame.setVisible(true);
+        frame.toFront();
     }
 }
