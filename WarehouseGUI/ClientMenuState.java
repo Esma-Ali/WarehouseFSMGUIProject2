@@ -1,19 +1,15 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.util.Iterator;
 
 public class ClientMenuState extends WarehouseState {
     private static ClientMenuState instance;
     private static Warehouse warehouse;
     private WarehouseContext context;
+    private JFrame frame;
+    private JTextArea outputArea;
     private String clientID;
-
-    private static final int LOGOUT = 0;
-    private static final int SHOW_DETAILS = 1;
-    private static final int SHOW_PRODUCTS = 2;
-    private static final int SHOW_TRANSACTIONS = 3;
-    private static final int ADD_TO_WISHLIST = 4;
-    private static final int DISPLAY_WISHLIST = 5;
-    private static final int PLACE_ORDER = 6;
-    private static final int HELP = 7;
 
     private ClientMenuState() {
         super();
@@ -28,55 +24,20 @@ public class ClientMenuState extends WarehouseState {
         return instance;
     }
 
-    // Input goes through WarehouseInput so every state shares one reader
-    // on System.in.
-    public String getToken(String prompt) {
-        return WarehouseInput.getToken(prompt);
-    }
-
-    private boolean yesOrNo(String prompt) {
-        return WarehouseInput.yesOrNo(prompt);
-    }
-
-    public int getNumber(String prompt) {
-        return WarehouseInput.getNumber(prompt);
-    }
-
-    public int getCommand() {
-        while (true) {
-            int command = getNumber("Enter command (" + HELP + " for help)");
-
-            if (command >= LOGOUT && command <= HELP) {
-                return command;
-            }
-
-            System.out.println("Enter a number between "
-                    + LOGOUT + " and " + HELP + ".");
-        }
-    }
-
-    public void help() {
-        System.out.println("\n---- Client Menu ----");
-        System.out.println(LOGOUT + " to logout");
-        System.out.println(SHOW_DETAILS + " to show my details");
-        System.out.println(SHOW_PRODUCTS + " to show products");
-        System.out.println(SHOW_TRANSACTIONS + " to show my transactions");
-        System.out.println(ADD_TO_WISHLIST
-                + " to add a product to my wishlist");
-        System.out.println(DISPLAY_WISHLIST + " to display my wishlist");
-        System.out.println(PLACE_ORDER + " to place an order");
-        System.out.println(HELP + " for help");
+    private void show(String text) {
+        outputArea.setText(text);
+        outputArea.setCaretPosition(0);
     }
 
     public void showDetails() {
         Client client = warehouse.getClient(clientID);
 
         if (client == null) {
-            System.out.println("Client not found.");
+            show("Client not found.");
             return;
         }
 
-        System.out.println(client);
+        show(client.toString());
     }
 
     // Product.toString() includes the price.
@@ -84,71 +45,100 @@ public class ClientMenuState extends WarehouseState {
         Iterator<Product> products = warehouse.getProducts();
 
         if (!products.hasNext()) {
-            System.out.println("No products in the warehouse.");
+            show("No products in the warehouse.");
             return;
         }
 
+        StringBuilder result = new StringBuilder();
+
         while (products.hasNext()) {
-            System.out.println(products.next());
+            result.append(products.next()).append("\n");
         }
+
+        show(result.toString());
     }
 
     public void showTransactions() {
         Iterator<Invoice> invoices = warehouse.getClientInvoices(clientID);
 
         if (invoices == null || !invoices.hasNext()) {
-            System.out.println("No transactions for this client.");
+            show("No transactions for this client.");
             return;
         }
 
+        StringBuilder result = new StringBuilder();
+
         while (invoices.hasNext()) {
-            System.out.println(invoices.next());
+            result.append(invoices.next()).append("\n");
         }
+
+        show(result.toString());
     }
 
     public void addToWishlist() {
-        do {
-            String productID = getToken("Enter product ID (e.g. P1)");
+        String productID = JOptionPane.showInputDialog(
+                frame, "Enter product ID (e.g. P1):");
 
-            if (warehouse.getProduct(productID) == null) {
-                System.out.println("Product ID not found.");
+        if (productID == null || productID.trim().isEmpty()) {
+            return;
+        }
+
+        productID = productID.trim();
+
+        if (warehouse.getProduct(productID) == null) {
+            show("Product ID not found.");
+            return;
+        }
+
+        String quantityInput = JOptionPane.showInputDialog(
+                frame, "Enter quantity:");
+
+        if (quantityInput == null) {
+            return;
+        }
+
+        try {
+            int quantity = Integer.parseInt(quantityInput.trim());
+
+            // Adding a product that is already on the wishlist
+            // replaces its quantity.
+            if (warehouse.addToWishlist(clientID, productID, quantity)) {
+                show("Wishlist updated: " + quantity + " of " + productID
+                        + ".");
             } else {
-                int quantity = getNumber("Enter quantity");
-
-                // Adding a product that is already on the wishlist
-                // replaces its quantity.
-                if (warehouse.addToWishlist(clientID, productID, quantity)) {
-                    System.out.println("Wishlist updated.");
-                } else {
-                    System.out.println("Quantity must be a positive number.");
-                }
+                show("Quantity must be a positive number.");
             }
-        } while (yesOrNo("Add another product?"));
+        } catch (NumberFormatException exception) {
+            show("Please enter a valid whole number for quantity.");
+        }
     }
 
     public void displayWishlist() {
         Iterator<WishlistItem> items = warehouse.getClientWishlist(clientID);
 
         if (items == null || !items.hasNext()) {
-            System.out.println("Your wishlist is empty.");
+            show("Your wishlist is empty.");
             return;
         }
 
+        StringBuilder result = new StringBuilder();
+
         while (items.hasNext()) {
-            System.out.println(items.next());
+            result.append(items.next()).append("\n");
         }
+
+        show(result.toString());
     }
 
     public void placeOrder() {
         int invoicesBefore = countInvoices();
 
         if (!warehouse.processOrder(clientID)) {
-            System.out.println(
-                    "Could not place an order. Your wishlist is empty.");
+            show("Could not place an order. Your wishlist is empty.");
             return;
         }
 
-        System.out.println("Order processed.");
+        StringBuilder result = new StringBuilder("Order processed.\n");
 
         // Items that could not be supplied go on the product waitlists,
         // so an order may produce no new invoice.
@@ -161,11 +151,12 @@ public class ClientMenuState extends WarehouseState {
                 latest = invoices.next();
             }
 
-            System.out.println(latest);
+            result.append("\n").append(latest).append("\n");
         }
 
-        System.out.println("Any quantities that were out of stock have "
+        result.append("\nAny quantities that were out of stock have "
                 + "been added to the product waitlists.");
+        show(result.toString());
     }
 
     private int countInvoices() {
@@ -186,55 +177,102 @@ public class ClientMenuState extends WarehouseState {
         context.logout();
     }
 
-    public void process() {
-        help();
-
-        while (context.getCurrentState()
-                == WarehouseContext.CLIENT_STATE) {
-            switch (getCommand()) {
-                case LOGOUT:
-                    logout();
-                    break;
-
-                case SHOW_DETAILS:
-                    showDetails();
-                    break;
-
-                case SHOW_PRODUCTS:
-                    showProducts();
-                    break;
-
-                case SHOW_TRANSACTIONS:
-                    showTransactions();
-                    break;
-
-                case ADD_TO_WISHLIST:
-                    addToWishlist();
-                    break;
-
-                case DISPLAY_WISHLIST:
-                    displayWishlist();
-                    break;
-
-                case PLACE_ORDER:
-                    placeOrder();
-                    break;
-
-                case HELP:
-                    help();
-                    break;
-
-                default:
-                    break;
-            }
-        }
-    }
-
     // Called by WarehouseContext. The client is whoever logged in, or
     // whoever a clerk chose with "become client".
     @Override
     public void run() {
         clientID = context.getActiveClientID();
-        process();
+        frame = context.getFrame();
+
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 15));
+        mainPanel.setBorder(
+                BorderFactory.createEmptyBorder(20, 30, 20, 30));
+
+        JLabel title = new JLabel(
+                "Client Menu - " + clientID, SwingConstants.CENTER);
+        title.setFont(new Font("SansSerif", Font.BOLD, 24));
+
+        JPanel buttonPanel = new JPanel(new GridLayout(7, 1, 8, 8));
+
+        JButton detailsButton = new JButton(
+                new AbstractAction("Show My Details") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        showDetails();
+                    }
+                });
+
+        JButton productsButton = new JButton(
+                new AbstractAction("Show Products") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        showProducts();
+                    }
+                });
+
+        JButton transactionsButton = new JButton(
+                new AbstractAction("Show My Transactions") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        showTransactions();
+                    }
+                });
+
+        JButton addWishlistButton = new JButton(
+                new AbstractAction("Add to Wishlist") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        addToWishlist();
+                    }
+                });
+
+        JButton displayWishlistButton = new JButton(
+                new AbstractAction("Display Wishlist") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        displayWishlist();
+                    }
+                });
+
+        JButton placeOrderButton = new JButton(
+                new AbstractAction("Place Order") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        placeOrder();
+                    }
+                });
+
+        JButton logoutButton = new JButton(
+                new AbstractAction("Logout") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        logout();
+                    }
+                });
+
+        buttonPanel.add(detailsButton);
+        buttonPanel.add(productsButton);
+        buttonPanel.add(transactionsButton);
+        buttonPanel.add(addWishlistButton);
+        buttonPanel.add(displayWishlistButton);
+        buttonPanel.add(placeOrderButton);
+        buttonPanel.add(logoutButton);
+
+        outputArea = new JTextArea(12, 28);
+        outputArea.setEditable(false);
+        outputArea.setLineWrap(true);
+        outputArea.setWrapStyleWord(true);
+        JScrollPane scrollPane = new JScrollPane(outputArea);
+        scrollPane.setBorder(BorderFactory.createTitledBorder("Output"));
+
+        mainPanel.add(title, BorderLayout.NORTH);
+        mainPanel.add(buttonPanel, BorderLayout.WEST);
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
+
+        frame.setContentPane(mainPanel);
+        frame.revalidate();
+        frame.repaint();
+        frame.setVisible(true);
+        frame.toFront();
     }
 }
