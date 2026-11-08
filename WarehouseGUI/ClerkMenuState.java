@@ -1,23 +1,17 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.util.Iterator;
 
 public class ClerkMenuState extends WarehouseState {
-    private static ClerkMenuState instance;
-    private static Warehouse warehouse;
-    private WarehouseContext context;
 
-    private static final int LOGOUT = 0;
-    private static final int ADD_CLIENT = 1;
-    private static final int SHOW_PRODUCTS = 2;
-    private static final int SHOW_CLIENTS = 3;
-    private static final int SHOW_CLIENTS_WITH_BALANCE = 4;
-    private static final int RECORD_PAYMENT = 5;
-    private static final int BECOME_CLIENT = 6;
-    private static final int HELP = 7;
+    private static ClerkMenuState instance;
+    private Warehouse warehouse;
+    private JFrame frame;
 
     private ClerkMenuState() {
         super();
         warehouse = Warehouse.instance();
-        context = WarehouseContext.instance();
     }
 
     public static ClerkMenuState instance() {
@@ -27,186 +21,252 @@ public class ClerkMenuState extends WarehouseState {
         return instance;
     }
 
-    // Input goes through WarehouseInput so every state shares one reader
-    // on System.in.
-    public String getToken(String prompt) {
-        return WarehouseInput.getToken(prompt);
+    // Shows multi-line output in a scrollable text area.
+    private void showResults(String title, String text) {
+        JTextArea area = new JTextArea(text, 12, 50);
+        area.setEditable(false);
+        area.setFont(new Font("SansSerif", Font.PLAIN, 12));
+
+        JOptionPane.showMessageDialog(
+                frame, new JScrollPane(area),
+                title, JOptionPane.INFORMATION_MESSAGE);
     }
 
-    private boolean yesOrNo(String prompt) {
-        return WarehouseInput.yesOrNo(prompt);
-    }
+    private void addClient() {
+        int choice;
 
-    public int getNumber(String prompt) {
-        return WarehouseInput.getNumber(prompt);
-    }
+        do {
+            String name = JOptionPane.showInputDialog(
+                    frame, "Enter client name:");
 
-    public double getAmount(String prompt) {
-        return WarehouseInput.getAmount(prompt);
-    }
-
-    public int getCommand() {
-        while (true) {
-            int command = getNumber("Enter command (" + HELP + " for help)");
-
-            if (command >= LOGOUT && command <= HELP) {
-                return command;
+            if (name == null || name.trim().isEmpty()) {
+                return;
             }
 
-            System.out.println("Enter a number between "
-                    + LOGOUT + " and " + HELP + ".");
-        }
-    }
+            String address = JOptionPane.showInputDialog(
+                    frame, "Enter client address:");
 
-    public void help() {
-        System.out.println("\n---- Clerk Menu ----");
-        System.out.println(LOGOUT + " to logout");
-        System.out.println(ADD_CLIENT + " to add a client");
-        System.out.println(SHOW_PRODUCTS + " to show products");
-        System.out.println(SHOW_CLIENTS + " to show clients");
-        System.out.println(SHOW_CLIENTS_WITH_BALANCE
-                + " to show clients with an outstanding balance");
-        System.out.println(RECORD_PAYMENT + " to record a payment");
-        System.out.println(BECOME_CLIENT + " to become a client");
-        System.out.println(HELP + " for help");
-    }
+            if (address == null || address.trim().isEmpty()) {
+                return;
+            }
 
-    public void addClient() {
-        do {
-            String name = getToken("Enter client name");
-            String address = getToken("Enter client address");
-            Client result = warehouse.addClient(name, address);
+            Client result = warehouse.addClient(name.trim(), address.trim());
 
             if (result == null) {
-                System.out.println("Could not add client.");
+                JOptionPane.showMessageDialog(
+                        frame, "Could not add client.");
             } else {
-                System.out.println("Added " + result);
+                JOptionPane.showMessageDialog(
+                        frame, "Added " + result);
             }
-        } while (yesOrNo("Add another client?"));
+
+            choice = JOptionPane.showConfirmDialog(
+                    frame, "Add another client?",
+                    "Add Client", JOptionPane.YES_NO_OPTION);
+        } while (choice == JOptionPane.YES_OPTION);
     }
 
-    public void showProducts() {
+    private void showProducts() {
         Iterator<Product> products = warehouse.getProducts();
-
-        if (!products.hasNext()) {
-            System.out.println("No products in the warehouse.");
-            return;
-        }
+        StringBuilder result = new StringBuilder();
 
         while (products.hasNext()) {
-            System.out.println(products.next());
+            result.append(products.next()).append("\n");
         }
+
+        if (result.length() == 0) {
+            result.append("No products in the warehouse.");
+        }
+
+        showResults("All Products", result.toString());
     }
 
-    public void showClients() {
+    private void showClients() {
         Iterator<Client> clients = warehouse.getClients();
-
-        if (!clients.hasNext()) {
-            System.out.println("No clients in the warehouse.");
-            return;
-        }
+        StringBuilder result = new StringBuilder();
 
         while (clients.hasNext()) {
-            System.out.println(clients.next());
+            result.append(clients.next()).append("\n");
         }
+
+        if (result.length() == 0) {
+            result.append("No clients in the warehouse.");
+        }
+
+        showResults("All Clients", result.toString());
     }
 
     // A positive balance means the client owes money.
-    public void showClientsWithBalance() {
+    private void showClientsWithBalance() {
         Iterator<Client> clients = warehouse.getClients();
-        boolean found = false;
+        StringBuilder result = new StringBuilder();
 
         while (clients.hasNext()) {
             Client client = clients.next();
 
             if (client.getBalance() > 0) {
-                System.out.println(client);
-                found = true;
+                result.append(client).append("\n");
             }
         }
 
-        if (!found) {
-            System.out.println("No clients have an outstanding balance.");
+        if (result.length() == 0) {
+            result.append("No clients have an outstanding balance.");
         }
+
+        showResults("Clients With Outstanding Balance", result.toString());
     }
 
-    public void recordPayment() {
-        String clientID = getToken("Enter client ID");
+    private void recordPayment() {
+        String clientID = JOptionPane.showInputDialog(
+                frame, "Enter client ID:");
 
-        if (warehouse.getClient(clientID) == null) {
-            System.out.println("Client ID not found.");
+        if (clientID == null || clientID.trim().isEmpty()) {
             return;
         }
 
-        double amount = getAmount("Enter payment amount");
-        Double balance = warehouse.recordPayment(clientID, amount);
+        clientID = clientID.trim();
 
-        if (balance == null) {
-            System.out.println("Payment must be a positive amount.");
-        } else {
-            System.out.println("Payment recorded. New balance: $"
-                    + String.format("%.2f", balance));
+        if (warehouse.getClient(clientID) == null) {
+            JOptionPane.showMessageDialog(
+                    frame, "Client ID not found.");
+            return;
         }
-    }
 
-    public void becomeClient() {
-        String clientID = getToken("Enter client ID (e.g. C1)");
+        String amountInput = JOptionPane.showInputDialog(
+                frame, "Enter payment amount:");
 
-        if (!context.becomeClient(clientID)) {
-            System.out.println("Invalid client ID.");
+        if (amountInput == null) {
+            return;
         }
-    }
 
-    public void logout() {
-        context.logout();
-    }
+        try {
+            double amount = Double.parseDouble(amountInput.trim());
 
-    public void process() {
-        help();
-
-        while (context.getCurrentState()
-                == WarehouseContext.CLERK_STATE) {
-            switch (getCommand()) {
-                case LOGOUT:
-                    logout();
-                    break;
-
-                case ADD_CLIENT:
-                    addClient();
-                    break;
-
-                case SHOW_PRODUCTS:
-                    showProducts();
-                    break;
-
-                case SHOW_CLIENTS:
-                    showClients();
-                    break;
-
-                case SHOW_CLIENTS_WITH_BALANCE:
-                    showClientsWithBalance();
-                    break;
-
-                case RECORD_PAYMENT:
-                    recordPayment();
-                    break;
-
-                case BECOME_CLIENT:
-                    becomeClient();
-                    break;
-
-                case HELP:
-                    help();
-                    break;
-
-                default:
-                    break;
+            if (!Double.isFinite(amount)) {
+                throw new NumberFormatException();
             }
+
+            Double balance = warehouse.recordPayment(clientID, amount);
+
+            if (balance == null) {
+                JOptionPane.showMessageDialog(
+                        frame, "Payment must be a positive amount.");
+            } else {
+                JOptionPane.showMessageDialog(
+                        frame, "Payment recorded. New balance: $"
+                                + String.format("%.2f", balance));
+            }
+        } catch (NumberFormatException exception) {
+            JOptionPane.showMessageDialog(
+                    frame, "Please enter a valid amount.");
         }
+    }
+
+    private void becomeClient() {
+        String clientID = JOptionPane.showInputDialog(
+                frame, "Enter client ID (e.g. C1):");
+
+        if (clientID == null || clientID.trim().isEmpty()) {
+            return;
+        }
+
+        if (!WarehouseContext.instance().becomeClient(clientID.trim())) {
+            JOptionPane.showMessageDialog(
+                    frame, "Invalid client ID.",
+                    "Become Client", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void logout() {
+        WarehouseContext.instance().logout();
     }
 
     @Override
     public void run() {
-        process();
+        frame = WarehouseContext.instance().getFrame();
+
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 20));
+        mainPanel.setBorder(
+                BorderFactory.createEmptyBorder(30, 40, 30, 40));
+
+        JLabel title = new JLabel(
+                "Clerk Menu", SwingConstants.CENTER);
+        title.setFont(new Font("SansSerif", Font.BOLD, 24));
+
+        JPanel buttonPanel = new JPanel(new GridLayout(7, 1, 10, 10));
+
+        // Each button has its own action
+        JButton addClientButton = new JButton(
+                new AbstractAction("Add Client") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        addClient();
+                    }
+                });
+
+        JButton showProductsButton = new JButton(
+                new AbstractAction("Show Products") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        showProducts();
+                    }
+                });
+
+        JButton showClientsButton = new JButton(
+                new AbstractAction("Show Clients") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        showClients();
+                    }
+                });
+
+        JButton balanceButton = new JButton(
+                new AbstractAction("Show Clients With Outstanding Balance") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        showClientsWithBalance();
+                    }
+                });
+
+        JButton paymentButton = new JButton(
+                new AbstractAction("Record Payment") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        recordPayment();
+                    }
+                });
+
+        JButton clientButton = new JButton(
+                new AbstractAction("Become Client") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        becomeClient();
+                    }
+                });
+
+        JButton logoutButton = new JButton(
+                new AbstractAction("Logout") {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        logout();
+                    }
+                });
+
+        buttonPanel.add(addClientButton);
+        buttonPanel.add(showProductsButton);
+        buttonPanel.add(showClientsButton);
+        buttonPanel.add(balanceButton);
+        buttonPanel.add(paymentButton);
+        buttonPanel.add(clientButton);
+        buttonPanel.add(logoutButton);
+
+        mainPanel.add(title, BorderLayout.NORTH);
+        mainPanel.add(buttonPanel, BorderLayout.CENTER);
+
+        frame.setContentPane(mainPanel);
+        frame.revalidate();
+        frame.repaint();
+        frame.setVisible(true);
+        frame.toFront();
     }
 }
