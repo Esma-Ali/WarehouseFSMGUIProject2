@@ -5,6 +5,7 @@ public class WarehouseContext {
     public static final int CLIENT_STATE = 1;
     public static final int CLERK_STATE = 2;
     public static final int MANAGER_STATE = 3;
+    public static final int WISHLIST_STATE = 4;
 
     private static final int NO_ROLE = -1;
     private static final int INVALID_TRANSITION = -1;
@@ -17,6 +18,8 @@ public class WarehouseContext {
     private static final int LOGOUT_TO_LOGIN = 5;
     private static final int LOGOUT_TO_CLERK = 6;
     private static final int LOGOUT_TO_MANAGER = 7;
+    private static final int ENTER_WISHLIST = 8;
+    private static final int RETURN_TO_CLIENT = 9;
 
     private static WarehouseContext context;
 
@@ -29,24 +32,101 @@ public class WarehouseContext {
     private String activeClientID;
     private boolean running = true;
 
-    // Rows are events. Columns are Login, Client, Clerk, and Manager.
+    /*
+     * Rows represent transition events.
+     * Columns represent:
+     * Login, Client, Clerk, Manager, and Wishlist.
+     */
     private final int[][] transitionMatrix = {
-            {CLIENT_STATE, INVALID_TRANSITION,
-                    INVALID_TRANSITION, INVALID_TRANSITION},
-            {CLERK_STATE, INVALID_TRANSITION,
-                    INVALID_TRANSITION, INVALID_TRANSITION},
-            {MANAGER_STATE, INVALID_TRANSITION,
-                    INVALID_TRANSITION, INVALID_TRANSITION},
-            {INVALID_TRANSITION, INVALID_TRANSITION,
-                    CLIENT_STATE, INVALID_TRANSITION},
-            {INVALID_TRANSITION, INVALID_TRANSITION,
-                    INVALID_TRANSITION, CLERK_STATE},
-            {INVALID_TRANSITION, LOGIN_STATE,
-                    LOGIN_STATE, LOGIN_STATE},
-            {INVALID_TRANSITION, CLERK_STATE,
-                    INVALID_TRANSITION, INVALID_TRANSITION},
-            {INVALID_TRANSITION, INVALID_TRANSITION,
-                    MANAGER_STATE, INVALID_TRANSITION}
+            // LOGIN_CLIENT
+            {
+                    CLIENT_STATE,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION
+            },
+
+            // LOGIN_CLERK
+            {
+                    CLERK_STATE,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION
+            },
+
+            // LOGIN_MANAGER
+            {
+                    MANAGER_STATE,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION
+            },
+
+            // BECOME_CLIENT
+            {
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    CLIENT_STATE,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION
+            },
+
+            // BECOME_CLERK
+            {
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    CLERK_STATE,
+                    INVALID_TRANSITION
+            },
+
+            // LOGOUT_TO_LOGIN
+            {
+                    INVALID_TRANSITION,
+                    LOGIN_STATE,
+                    LOGIN_STATE,
+                    LOGIN_STATE,
+                    LOGIN_STATE
+            },
+
+            // LOGOUT_TO_CLERK
+            {
+                    INVALID_TRANSITION,
+                    CLERK_STATE,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    CLERK_STATE
+            },
+
+            // LOGOUT_TO_MANAGER
+            {
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    MANAGER_STATE,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION
+            },
+
+            // ENTER_WISHLIST
+            {
+                    INVALID_TRANSITION,
+                    WISHLIST_STATE,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION
+            },
+
+            // RETURN_TO_CLIENT
+            {
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    INVALID_TRANSITION,
+                    CLIENT_STATE
+            }
     };
 
     private WarehouseContext() {
@@ -54,7 +134,7 @@ public class WarehouseContext {
 
         frame = new JFrame("Warehouse FSM GUI");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(650, 450);
+        frame.setSize(850, 550);
         frame.setLocationRelativeTo(null);
     }
 
@@ -62,6 +142,7 @@ public class WarehouseContext {
         if (context == null) {
             context = new WarehouseContext();
         }
+
         return context;
     }
 
@@ -74,7 +155,8 @@ public class WarehouseContext {
                 LoginState.instance(),
                 ClientMenuState.instance(),
                 ClerkMenuState.instance(),
-                ManagerMenuState.instance()
+                ManagerMenuState.instance(),
+                WishlistMenuState.instance()
         };
     }
 
@@ -102,12 +184,15 @@ public class WarehouseContext {
 
             activeClientID = clientID.trim();
             event = LOGIN_CLIENT;
+
         } else if (role == CLERK_STATE) {
             activeClientID = null;
             event = LOGIN_CLERK;
+
         } else if (role == MANAGER_STATE) {
             activeClientID = null;
             event = LOGIN_MANAGER;
+
         } else {
             return false;
         }
@@ -138,10 +223,41 @@ public class WarehouseContext {
         return true;
     }
 
+    /*
+     * Transitions from Client Menu to Wishlist Operations.
+     */
+    public void openWishlistMenu() {
+        if (currentState != CLIENT_STATE) {
+            throw new IllegalStateException(
+                    "Wishlist Operations can only be opened "
+                            + "from the Client Menu.");
+        }
+
+        changeState(ENTER_WISHLIST);
+    }
+
+    /*
+     * Transitions from Wishlist Operations back to Client Menu.
+     */
+    public void returnToClientMenu() {
+        if (currentState != WISHLIST_STATE) {
+            throw new IllegalStateException(
+                    "The current state is not Wishlist Operations.");
+        }
+
+        changeState(RETURN_TO_CLIENT);
+    }
+
     public void logout() {
         int event;
 
-        if (currentState == CLIENT_STATE) {
+        /*
+         * Wishlist Operations follows the same logout rules
+         * as Client Menu.
+         */
+        if (currentState == CLIENT_STATE
+                || currentState == WISHLIST_STATE) {
+
             activeClientID = null;
 
             if (originalLoginRole == CLIENT_STATE) {
@@ -149,14 +265,17 @@ public class WarehouseContext {
             } else {
                 event = LOGOUT_TO_CLERK;
             }
+
         } else if (currentState == CLERK_STATE) {
             if (originalLoginRole == MANAGER_STATE) {
                 event = LOGOUT_TO_MANAGER;
             } else {
                 event = LOGOUT_TO_LOGIN;
             }
+
         } else if (currentState == MANAGER_STATE) {
             event = LOGOUT_TO_LOGIN;
+
         } else {
             return;
         }
@@ -181,12 +300,17 @@ public class WarehouseContext {
     }
 
     private void changeState(int event) {
+        if (states == null) {
+            initializeStates();
+        }
+
         if (event < 0 || event >= transitionMatrix.length) {
             throw new IllegalArgumentException(
                     "Invalid transition event.");
         }
 
-        int nextState = transitionMatrix[event][currentState];
+        int nextState =
+                transitionMatrix[event][currentState];
 
         if (nextState == INVALID_TRANSITION) {
             throw new IllegalStateException(
